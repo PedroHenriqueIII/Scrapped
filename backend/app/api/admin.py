@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.core.security import get_current_user, UserResponse
+from app.core.deps import get_current_user
+from app.core.security import UserResponse
 from app.models.models import User
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
