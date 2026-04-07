@@ -1,26 +1,20 @@
 import { useState } from "react"
-import { useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { authApi, searchApi, DecisionMaker, SearchStatus } from "@/lib/api"
+import { searchApi, DecisionMaker, SearchStatus } from "@/lib/api"
+import { useAuth } from "@/lib/auth"
 import { Search, Upload, History, LogOut, Loader2 } from "lucide-react"
 
 export default function DashboardPage() {
-  const navigate = useNavigate()
+  const { user, logout } = useAuth()
   const [query, setQuery] = useState("")
   const [targetRole, setTargetRole] = useState("")
   const [searchId, setSearchId] = useState<string | null>(null)
   const [isSearching, setIsSearching] = useState(false)
-
-  const { data: user } = useQuery({
-    queryKey: ["user"],
-    queryFn: () => authApi.getMe(),
-    retry: false,
-  })
 
   const { data: searchHistory, refetch: refetchHistory } = useQuery({
     queryKey: ["searchHistory"],
@@ -31,11 +25,12 @@ export default function DashboardPage() {
     queryKey: ["search", searchId],
     queryFn: () => searchApi.get(searchId!),
     enabled: !!searchId,
-    refetchInterval: (data) => {
-      if (data?.data?.status === "completed" || data?.data?.status === "failed") {
-        return false
+    refetchInterval: () => {
+      const status = searchResult?.data?.status;
+      if (status === "completed" || status === "failed") {
+        return false;
       }
-      return 3000
+      return 3000;
     },
   })
 
@@ -55,9 +50,8 @@ export default function DashboardPage() {
     }
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem("token")
-    navigate("/login")
+  const handleLogout = async () => {
+    await logout()
   }
 
   const getStatusBadge = (status: string) => {
@@ -81,16 +75,16 @@ export default function DashboardPage() {
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <h1 className="text-xl font-bold text-gray-900">Scrapped</h1>
           <div className="flex items-center gap-4">
-            {user?.data && (
+            {user && (
               <div className="flex items-center gap-2">
-                {user.data.picture && (
+                {user.picture && (
                   <img 
-                    src={user.data.picture} 
-                    alt={user.data.name} 
+                    src={user.picture} 
+                    alt={user.name} 
                     className="h-8 w-8 rounded-full"
                   />
                 )}
-                <span className="text-sm font-medium">{user.data.name}</span>
+                <span className="text-sm font-medium">{user.name}</span>
               </div>
             )}
             <Button variant="ghost" size="icon" onClick={handleLogout}>

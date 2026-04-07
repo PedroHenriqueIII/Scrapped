@@ -6,12 +6,18 @@ export default function CallbackPage() {
   const [searchParams] = useSearchParams()
 
   useEffect(() => {
-    const token = searchParams.get("token")
-    if (token) {
-      localStorage.setItem("token", token)
+    const accessToken = searchParams.get("access_token")
+    const refreshToken = searchParams.get("refresh_token")
+
+    if (accessToken && refreshToken) {
+      localStorage.setItem("access_token", accessToken)
+      localStorage.setItem("refresh_token", refreshToken)
+      
+      window.history.replaceState({}, document.title, "/auth/callback")
+      
       navigate("/dashboard")
     } else {
-      navigate("/login")
+      navigate("/login?error=auth_failed")
     }
   }, [navigate, searchParams])
 

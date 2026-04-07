@@ -4,21 +4,28 @@ import { authApi } from "@/lib/api"
 import { Mail } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { useAuth } from "@/lib/auth"
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const { isAuthenticated } = useAuth()
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    const token = localStorage.getItem("token")
-    if (token) {
+    if (isAuthenticated) {
       navigate("/dashboard")
     }
-  }, [navigate])
+  }, [isAuthenticated, navigate])
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setLoading(true)
-    authApi.login()
+    try {
+      const authUrl = await authApi.getGoogleAuthUrl()
+      window.location.href = authUrl
+    } catch (error) {
+      console.error("Failed to get Google auth URL:", error)
+      setLoading(false)
+    }
   }
 
   return (
