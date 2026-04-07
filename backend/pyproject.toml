@@ -35,7 +35,7 @@ pandas = "^2.1.0"
 rapidfuzz = "^3.6.0"
 geopy = "^2.4.0"
 phonenumbers = "^8.13.0"
-pyisemail = "^2.1.1"
+pyisemail = "^2.0.1"
 tldextract = "^5.1.0"
 python-dotenv = "^1.0.0"
 

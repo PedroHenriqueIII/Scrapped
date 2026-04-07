@@ -1,0 +1,3 @@
+@echo off
+"C:\Users\PEDRO HENRIQUE\AppData\Local\Programs\Python\Python311\Scripts\pip.exe" install fastapi uvicorn pydantic pydantic-settings authlib python-jose passlib python-multipart celery redis sqlalchemy asyncpg psycopg2-binary alembic spacy sentence-transformers langdetect unidecode playwright httpx beautifulsoup4 lxml scrapy googlesearch-python pandas rapidfuzz geopy phonenumbers pyisemail tldextract python-dotenv
+pause
