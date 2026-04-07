@@ -1,14 +1,18 @@
 import secrets
 import redis
+import bcrypt
 from datetime import timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy.orm import Session
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 import httpx
+from pydantic import BaseModel
 
-from app.core.database import get_db
+from app.core.database import get_db, get_db_sync
 from app.core.security import create_access_token, create_refresh_token, decode_token, UserResponse
 from app.core.settings import get_settings
 from app.core.deps import get_current_user
@@ -38,7 +42,7 @@ async def google_auth(request: Request):
 
 
 @router.get("/google/callback")
-async def google_callback(code: str, state: Optional[str] = None, db: Session = Depends(get_db)):
+async def google_callback(code: str, state: Optional[str] = None, db: AsyncSession = Depends(get_db)):
     token_url = "https://oauth2.googleapis.com/token"
     token_data = {
         "client_id": settings.GOOGLE_CLIENT_ID,
@@ -68,12 +72,14 @@ async def google_callback(code: str, state: Optional[str] = None, db: Session = 
     name = userinfo.get("name")
     picture = userinfo.get("picture")
 
-    user = db.query(User).filter(User.email == email).first()
+    result = await db.execute(select(User).filter(User.email == email))
+    user = result.scalar_one_or_none()
+    
     if user is None:
         user = User(email=email, name=name, picture=picture, is_active=False)
         db.add(user)
-        db.commit()
-        db.refresh(user)
+        await db.commit()
+        await db.refresh(user)
         is_active = False
     else:
         is_active = bool(user.is_active)
@@ -93,7 +99,7 @@ async def google_callback(code: str, state: Optional[str] = None, db: Session = 
 
 
 @router.post("/refresh")
-async def refresh_token(refresh_token: str, db: Session = Depends(get_db)):
+async def refresh_token(refresh_token: str, db = Depends(get_db_sync)):
     blacklist_key = f"blacklist:{refresh_token}"
     if redis_client.exists(blacklist_key):
         raise HTTPException(
@@ -152,3 +158,84 @@ async def logout(refresh_token: Optional[str] = None):
             pass
 
     return {"message": "Logged out successfully"}
+
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    name: str
+
+
+@router.post("/register")
+async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).filter(User.email == request.email))
+    existing_user = result.scalar_one_or_none()
+    
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
+    hashed = bcrypt.hashpw(request.password.encode(), bcrypt.gensalt()).decode()
+    
+    user = User(
+        email=request.email,
+        name=request.name,
+        hashed_password=hashed,
+        is_active=True
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    
+    access_token = create_access_token(str(user.id))
+    refresh_token = create_refresh_token(str(user.id))
+    
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "is_active": user.is_active,
+            "is_admin": user.is_admin
+        }
+    }
+
+
+@router.post("/login")
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).filter(User.email == form_data.username))
+    user = result.scalar_one_or_none()
+    
+    if not user or not user.hashed_password:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    if not bcrypt.checkpw(form_data.password.encode(), user.hashed_password.encode()):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User is inactive"
+        )
+    
+    access_token = create_access_token(str(user.id))
+    refresh_token = create_refresh_token(str(user.id))
+    
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer"
+    }

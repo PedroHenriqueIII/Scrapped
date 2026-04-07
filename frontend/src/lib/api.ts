@@ -140,6 +140,17 @@ export const authApi = {
   logout: (refreshToken?: string) => api.post('/api/auth/logout', null, {
     params: { refresh_token: refreshToken || undefined },
   }),
+  register: (email: string, password: string, name: string) =>
+    api.post<{ access_token: string; refresh_token: string; token_type: string; user: User }>('/api/auth/register', {
+      email,
+      password,
+      name,
+    }),
+  login: (email: string, password: string) =>
+    api.post<{ access_token: string; refresh_token: string; token_type: string }>('/api/auth/login', 
+      new URLSearchParams({ username: email, password }),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    ),
 };
 
 export const searchApi = {
@@ -164,4 +175,52 @@ export const adminApi = {
   
   deactivateUser: (userId: string) =>
     api.post(`/api/admin/users/${userId}/deactivate`),
+};
+
+export interface Connection {
+  id: string;
+  type: string;
+  expires_at?: string;
+  last_validated_at?: string;
+  days_remaining?: number;
+  created_at: string;
+}
+
+export interface ApiTokenData {
+  prefix: string;
+  created_at: string;
+  last_used_at?: string;
+}
+
+export interface ConnectionsData {
+  connections: Connection[];
+  api_token?: ApiTokenData;
+}
+
+export interface LinkedInValidateResult {
+  valid: boolean;
+  expires_at: string;
+  days_remaining: number;
+}
+
+export const connectionsApi = {
+  list: () => api.get<ConnectionsData>('/api/connections'),
+  
+  saveLinkedInCookie: (li_at: string) =>
+    api.post('/api/connections/linkedin', null, { params: { li_at } }),
+  
+  deleteLinkedInCookie: () =>
+    api.delete('/api/connections/linkedin'),
+  
+  validateLinkedIn: () =>
+    api.post<LinkedInValidateResult>('/api/connections/linkedin/validate'),
+  
+  getApiTokenMetadata: () =>
+    api.get<ApiTokenData>('/api/connections/api-token'),
+  
+  generateApiToken: () =>
+    api.post<{ token: string }>('/api/connections/api-token/generate'),
+  
+  revokeApiToken: () =>
+    api.delete('/api/connections/api-token'),
 };

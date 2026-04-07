@@ -28,6 +28,7 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     name = Column(String(255), nullable=False)
     picture = Column(String(512), nullable=True)
+    hashed_password = Column(String(255), nullable=True)
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -60,3 +61,31 @@ class DecisionMaker(Base):
     sources = Column(Text, nullable=True)
     confidence_score = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ConnectionType(str, enum.Enum):
+    LINKEDIN_COOKIE = "linkedin_cookie"
+
+
+class Connection(Base):
+    __tablename__ = "connections"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), nullable=False)
+    type = Column(SQLEnum(ConnectionType), nullable=False)
+    encrypted_value = Column(Text, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    last_validated_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ApiToken(Base):
+    __tablename__ = "api_tokens"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), nullable=False)
+    prefix = Column(String(20), nullable=False)
+    hash = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_used_at = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True)

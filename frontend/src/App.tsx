@@ -5,6 +5,7 @@ import { PrivateRoute } from "./components/PrivateRoute"
 import LoginPage from "./pages/LoginPage"
 import DashboardPage from "./pages/DashboardPage"
 import CallbackPage from "./pages/CallbackPage"
+import ConnectionsPage from "./pages/ConnectionsPage"
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,6 +29,14 @@ export default function App() {
               element={
                 <PrivateRoute>
                   <DashboardPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/connections"
+              element={
+                <PrivateRoute>
+                  <ConnectionsPage />
                 </PrivateRoute>
               }
             />

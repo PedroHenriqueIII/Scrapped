@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { searchApi, DecisionMaker, SearchStatus } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
-import { Search, Upload, History, LogOut, Loader2 } from "lucide-react"
+import { Search, Upload, History, LogOut, Loader2, Link2 } from "lucide-react"
+import { Link } from "react-router-dom"
 
 export default function DashboardPage() {
   const { user, logout } = useAuth()
@@ -87,6 +88,11 @@ export default function DashboardPage() {
                 <span className="text-sm font-medium">{user.name}</span>
               </div>
             )}
+            <Button variant="ghost" size="icon" asChild>
+              <Link to="/connections">
+                <Link2 className="h-4 w-4" />
+              </Link>
+            </Button>
             <Button variant="ghost" size="icon" onClick={handleLogout}>
               <LogOut className="h-4 w-4" />
             </Button>

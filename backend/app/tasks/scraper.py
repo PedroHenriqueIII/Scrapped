@@ -4,9 +4,9 @@ import uuid
 from datetime import datetime
 from typing import List
 
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import SessionLocal
+from app.core.database import AsyncSessionLocal
 from app.core.settings import get_settings
 from app.models.models import Search, DecisionMaker, SearchStatus
 from app.services.classifier import classify_query
@@ -93,67 +93,70 @@ async def scrape_linkedin_source(query: str, search_type: str, target_role: str 
 
 
 async def run_parallel_scraping(search_id: str, query: str, search_type: str, target_role: str = None):
-    db = SessionLocal()
-    
-    try:
-        search = db.query(Search).filter(Search.id == uuid.UUID(search_id)).first()
-        if not search:
-            return
-        
-        search.status = SearchStatus.PROCESSING
-        db.commit()
-        
-        if search_type == "vague":
-            google_results = await search_google_for_companies(query, num_results=10)
-            companies = [r.get("url", "").split("//")[-1].split("/")[0] for r in google_results if r.get("url")]
+    async with AsyncSessionLocal() as db:
+        try:
+            from sqlalchemy import select
+            result = await db.execute(select(Search).filter(Search.id == uuid.UUID(search_id)))
+            search = result.scalar_one_or_none()
+            if not search:
+                return
             
-            all_results = []
-            for company in companies[:5]:
-                company_results = await scrape_rf_source(company, "company")
-                all_results.extend(company_results)
+            search.status = SearchStatus.PROCESSING
+            await db.commit()
+            
+            if search_type == "vague":
+                google_results = await search_google_for_companies(query, num_results=10)
+                companies = [r.get("url", "").split("//")[-1].split("/")[0] for r in google_results if r.get("url")]
                 
-                linkedin_results = await scrape_linkedin_source(company, "company", target_role)
-                all_results.extend(linkedin_results)
+                all_results = []
+                for company in companies[:5]:
+                    company_results = await scrape_rf_source(company, "company")
+                    all_results.extend(company_results)
+                    
+                    linkedin_results = await scrape_linkedin_source(company, "company", target_role)
+                    all_results.extend(linkedin_results)
+                
+                results = all_results
+            else:
+                rf_task = scrape_rf_source(query, search_type)
+                google_task = scrape_google_source(query, search_type)
+                linkedin_task = scrape_linkedin_source(query, search_type, target_role)
+                
+                rf_results, google_results, linkedin_results = await asyncio.gather(
+                    rf_task, google_task, linkedin_task
+                )
+                
+                results = rf_results + google_results + linkedin_results
             
-            results = all_results
-        else:
-            rf_task = scrape_rf_source(query, search_type)
-            google_task = scrape_google_source(query, search_type)
-            linkedin_task = scrape_linkedin_source(query, search_type, target_role)
+            for result_data in results:
+                dm = DecisionMaker(
+                    search_id=uuid.UUID(search_id),
+                    name=result_data.get("name", ""),
+                    role=result_data.get("role"),
+                    company=result_data.get("company"),
+                    email=result_data.get("email"),
+                    phone=result_data.get("phone"),
+                    linkedin_url=result_data.get("linkedin_url"),
+                    sources=json.dumps(result_data.get("sources", [])),
+                    confidence_score=result_data.get("confidence_score", 0.0)
+                )
+                db.add(dm)
             
-            rf_results, google_results, linkedin_results = await asyncio.gather(
-                rf_task, google_task, linkedin_task
-            )
+            search.status = SearchStatus.COMPLETED
+            search.completed_at = datetime.utcnow()
+            await db.commit()
             
-            results = rf_results + google_results + linkedin_results
-        
-        merged_results = merge_decision_makers(results, target_role)
-        
-        for result in merged_results:
-            dm = DecisionMaker(
-                search_id=uuid.UUID(search_id),
-                name=result.get("name", ""),
-                role=result.get("role"),
-                company=result.get("company"),
-                email=result.get("email"),
-                phone=result.get("phone"),
-                linkedin_url=result.get("linkedin_url"),
-                sources=json.dumps(result.get("sources", [])),
-                confidence_score=result.get("confidence_score", 0.0)
-            )
-            db.add(dm)
-        
-        search.status = SearchStatus.COMPLETED
-        search.completed_at = datetime.utcnow()
-        db.commit()
-        
-    except Exception as e:
-        search = db.query(Search).filter(Search.id == uuid.UUID(search_id)).first()
-        if search:
-            search.status = SearchStatus.FAILED
-            db.commit()
-    finally:
-        db.close()
+        except Exception as e:
+            try:
+                result = await db.execute(select(Search).filter(Search.id == uuid.UUID(search_id)))
+                search = result.scalar_one_or_none()
+                if search:
+                    search.status = SearchStatus.FAILED
+                    await db.commit()
+            except:
+                pass
+        finally:
+            await db.close()
 
 
 def is_cnpj_format(query: str) -> bool:
@@ -163,21 +166,26 @@ def is_cnpj_format(query: str) -> bool:
 
 
 def process_search_task(search_id: str):
-    db = SessionLocal()
-    
-    try:
-        search = db.query(Search).filter(Search.id == uuid.UUID(search_id)).first()
-        if not search:
-            return
-        
-        query = search.query
-        search_type = search.search_type.value if search.search_type else "company"
-        target_role = search.target_role
-        
-        asyncio.run(run_parallel_scraping(search_id, query, search_type, target_role))
-        
-    finally:
-        db.close()
+    asyncio.run(run_parallel_scraping_task(search_id))
+
+async def run_parallel_scraping_task(search_id: str):
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await db.execute(
+                __import__('sqlalchemy').select(Search).filter(Search.id == uuid.UUID(search_id))
+            )
+            search = result.scalar_one_or_none()
+            if not search:
+                return
+            
+            query = search.query
+            search_type = search.search_type.value if search.search_type else "company"
+            target_role = search.target_role
+            
+            await run_parallel_scraping(search_id, query, search_type, target_role)
+            
+        finally:
+            await db.close()
 
 
 from celery import Celery

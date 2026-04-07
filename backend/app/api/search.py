@@ -2,9 +2,8 @@ from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
-from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import get_db_sync
 from app.core.deps import get_current_user
 from app.core.security import UserResponse
 from app.models.models import Search, DecisionMaker, SearchStatus, SearchType
@@ -25,7 +24,7 @@ async def create_search(
     search_data: SearchCreate,
     background_tasks: BackgroundTasks,
     current_user: UserResponse = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db = Depends(get_db_sync)
 ):
     search_type = classify_query(search_data.query)
     
@@ -56,7 +55,7 @@ async def create_batch_search(
     batch_data: SearchBatchCreate,
     background_tasks: BackgroundTasks,
     current_user: UserResponse = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db = Depends(get_db_sync)
 ):
     searches = []
     for query in batch_data.queries:
@@ -81,7 +80,7 @@ async def create_batch_search(
 async def get_search(
     search_id: str,
     current_user: UserResponse = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db = Depends(get_db_sync)
 ):
     search = db.query(Search).filter(Search.id == UUID(search_id)).first()
     if not search:
@@ -110,7 +109,7 @@ async def list_searches(
     skip: int = 0,
     limit: int = 20,
     current_user: UserResponse = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db = Depends(get_db_sync)
 ):
     query = db.query(Search).filter(Search.user_id == UUID(current_user.id))
     total = query.count()

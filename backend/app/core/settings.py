@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     SPACY_MODEL: str = "pt_core_news_lg"
     SENTENCE_TRANSFORMER_MODEL: str = "paraphrase-multilingual-mpnet-base-v2"
 
+    ENCRYPTION_KEY: str = "encryption-key-change-in-production"
+
 
 @lru_cache
 def get_settings() -> Settings:
